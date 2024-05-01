@@ -6,7 +6,7 @@
 #' "gender" with gender of the individual, "sentence" with a string with all
 #' ICD-10 codes in sequantial order, and a column for each individual ICD-10
 #' code where the columns are ordered in sequential order.
-#' @param dat_controls A dataframe of potential controls with the same structure
+#' @param possible_controls A dataframe of potential controls with the same structure
 #' as `exposed_group`.
 #' @param W2V_model A trained Word2Vec model object.
 #' @param age_dif Maximum allowed difference in age for matching (default is 10).
@@ -19,13 +19,12 @@
 #' @export
 #'
 #' @examples
-#' # Assuming `exposed_group` and `possible_controls` are loaded and `W2V_model` is trained:
-#' results <- WEMatch(exposed_group, possible_controls, W2V_model)
 #'
-#'
-#' @import dplyr
+#' @importFrom dplyr filter mutate
 #' @importFrom magrittr "%>%"
 #' @importFrom stats setNames
+#' @import dplyr
+#' @import word2vec
 WEMatch <- function( exposed_group,
                     possible_controls,
                     W2V_model,
@@ -35,7 +34,7 @@ WEMatch <- function( exposed_group,
   # Code, inspired by https://github.com/nphdang/WVM/blob/master/word2vec_based_matching.R
 
   # remove ICD codes with frequency less than 30?
-  n_case = dim(dat_cases)[1]
+  n_case = dim(exposed_group)[1]
 
   # initialize empty vector for saving matched controls
   matched_controls <-  c()
@@ -53,30 +52,30 @@ WEMatch <- function( exposed_group,
     print(paste0(c("Matching: ", i)) )
 
     # take data of current exposed hospitalisation to match
-    patient_now <- dat_cases[i,]
+    patient_now <- exposed_group[i,]
 
     # Find individuals with similar age (within distance age_dif years) & BMI (distance less than BMI_dif points)
     # and the same sex
-    possible_controls <- dat_controls %>% filter( age_admission > (patient_now$age_admission-round(age_dif/2)) &
+    possible_controls_now <- possible_controls %>% filter( age_admission > (patient_now$age_admission-round(age_dif/2)) &
                                                     age_admission < (patient_now$age_admission+round(age_dif/2)) &
                                                     BMI > (patient_now$BMI-round(BMI_dif/2,2)) &
                                                     BMI < (patient_now$BMI+round(BMI_dif/2,2)) &
                                                     gender == patient_now$gender  )
 
     # print how many potential matches are available for this hospitalization
-    print(paste0(c("Select from ", dim(possible_controls)[1], " possible controls.")))
+    print(paste0(c("Select from ", dim(possible_controls_now)[1], " possible controls.")))
 
-    if (dim(possible_controls)[1]>0){
+    if (dim(possible_controls_now)[1]>0){
       # try to find perfect match
       print("trying to find perfect match")
 
       # CASE 1: Find perfect match
-      perfect_match <- possible_controls %>% filter( sentence %in% patient_now$sentence )
+      perfect_match <- possible_controls_now %>% filter( sentence %in% patient_now$sentence )
 
       # If there is an exact match, add it to the control group
       if (dim(perfect_match)[1]>0){
 
-        match = perfect_match[sample(nrow(perfect_match), N, replace=F),]
+        match = perfect_match[sample(nrow(perfect_match), 1, replace=F),]
 
         matched_controls[i,2:dim(matched_controls)[2]] <- as_vector( match  )
 
@@ -93,15 +92,15 @@ WEMatch <- function( exposed_group,
         print("found a perfect match")
 
         # remove this match from the possible controls for the other hospitalisations in the exposed group
-        dat_controls <- dat_controls %>% filter(!dim_fall_bk_pseudo == match$dim_fall_bk_pseudo )
+        possible_controls <- possible_controls %>% filter(!dim_fall_bk_pseudo == match$dim_fall_bk_pseudo )
 
       } else { # Else try to find the best possible match that comes close
         print("trying to match based on closest sequential codes")
 
         p = 1
-        dim_matched = dim(possible_controls)[1]
+        dim_matched = dim(possible_controls_now)[1]
 
-        matched_plus_1 <- possible_controls
+        matched_plus_1 <- possible_controls_now
 
         # find the most similar individual by checking each following code if it is the same for both patients
         while( dim_matched > 1 ){ # some while the next two ICD10 codes are the same
@@ -127,8 +126,8 @@ WEMatch <- function( exposed_group,
               ICD_matched = cbind( ICD_matched, as.numeric(p))
             }
 
-            # remove this match from the dat_controls
-            dat_controls <- dat_controls %>% filter(!dim_fall_bk_pseudo == match$dim_fall_bk_pseudo )
+            # remove this match from the possible_controls
+            possible_controls <- possible_controls %>% filter(!dim_fall_bk_pseudo == match$dim_fall_bk_pseudo )
 
           } else if( dim_matched == 0 ){ # if there are zero matches left over, return to previous p value (which is saved in matched_plus_2)
 
@@ -161,8 +160,8 @@ WEMatch <- function( exposed_group,
                 ICD_matched = cbind( ICD_matched, as.numeric(p-1)) # perfect ICD-10 matches is one less than p in this round
               }
 
-              # remove this match from the dat_controls
-              dat_controls <- dat_controls %>% filter(!dim_fall_bk_pseudo == match$dim_fall_bk_pseudo )
+              # remove this match from the possible_controls
+              possible_controls <- possible_controls %>% filter(!dim_fall_bk_pseudo == match$dim_fall_bk_pseudo )
 
             }
 
@@ -181,7 +180,7 @@ WEMatch <- function( exposed_group,
   }
 
   # output cases that were actually matched in the algorithm
-  matched_cases <- dat_cases %>% filter(dim_fall_bk_pseudo %in% matched_controls[,1])
+  matched_cases <- exposed_group %>% filter(dim_fall_bk_pseudo %in% matched_controls[,1])
 
   return(list(matched_controls, matched_cases, n_case1, n_case2, as.vector(ICD_matched[1,]) ))
 }
@@ -195,7 +194,7 @@ WEMatch <- function( exposed_group,
 #' "gender" with gender of the individual, "sentence" with a string with all
 #' ICD-10 codes in sequantial order, and a column for each individual ICD-10
 #' code where the columns are ordered in sequential order.
-#' @param dat_controls A dataframe of potential controls with the same structure
+#' @param possible_controls A dataframe of potential controls with the same structure
 #' as `exposed_group`.
 #' @param method A string specifying the distance method for finding matches; default is 'nearest'.
 #'               Options include 'nearest' for nearest neighbor matching and 'linear_nearest' for linear
@@ -214,12 +213,13 @@ WEMatch <- function( exposed_group,
 #' @export
 #'
 #' @examples
-#' # Assuming `exposed_group` and `possible_controls` are properly prepared:
-#' results <- Match_prop_ICD(exposed_group, possible_controls, method="nearest", model="mod_0")
 #'
-#' @importFrom MatchIt matchit
-#' @import dplyr
+#' @importFrom dplyr filter mutate
+#' @importFrom magrittr "%>%"
 #' @importFrom stats setNames
+#' @importFrom MatchIt matchit
+#' @importFrom stats logit
+#' @import dplyr
 Match_prop_ICD <- function(  exposed_group,
                              possible_controls,
                              method = "nearest",
@@ -228,12 +228,12 @@ Match_prop_ICD <- function(  exposed_group,
                              model = "mod_0"){
 
   # remove ICD codes with frequency less than 30?
-  n_case = dim(dat_cases)[1]
-  matched_controls = as.data.frame(matrix(NA, nrow=n_case*N, ncol=dim(dat_cases)[2]+1))
-  colnames(matched_controls) = c("Covid_match_ID", colnames(dat_cases))
-  matched_controls[,1] = rep(dat_cases$dim_fall_bk_pseudo, each = N)
+  n_case = dim(exposed_group)[1]
+  matched_controls = as.data.frame(matrix(NA, nrow=n_case, ncol=dim(exposed_group)[2]+1))
+  colnames(matched_controls) = c("Covid_match_ID", colnames(exposed_group))
+  matched_controls[,1] = rep(exposed_group$dim_fall_bk_pseudo, each = 1)
 
-  propensity <- rbind(dat_controls, dat_cases) %>% mutate(I35 = as.logical(I35))
+  propensity <- rbind(possible_controls, exposed_group) %>% mutate(I35 = as.logical(I35))
 
   # calculate propensity for all depending on the model
   if (model == "mod_0"){
@@ -290,8 +290,8 @@ Match_prop_ICD <- function(  exposed_group,
   }
 
 
-  dat_controls$prop_scores = m.out1$distance[1:dim(dat_controls)[1]]
-  dat_cases$prop_scores = m.out1$distance[(dim(dat_controls)[1]+1):(dim(dat_controls)[1]+n_case)]
+  possible_controls$prop_scores = m.out1$distance[1:dim(possible_controls)[1]]
+  exposed_group$prop_scores = m.out1$distance[(dim(possible_controls)[1]+1):(dim(possible_controls)[1]+n_case)]
 
   # add proprensity scores to the dataframe
   propensity$prop_scores = m.out1$distance
@@ -304,10 +304,10 @@ Match_prop_ICD <- function(  exposed_group,
   # loop over all COVID cases to match with other cases
   for (i in 1:n_case){
     print(c("starting with", i))
-    patient_now <- dat_cases[i,]
+    patient_now <- exposed_group[i,]
 
     # Find individuals with similar age (within distance <5 years) & BMI (distance less than 2 points)
-    possible_controls <- dat_controls %>% filter( age_admission > (patient_now$age_admission-round(age_dif/2)) &
+    possible_controls_now <- possible_controls %>% filter( age_admission > (patient_now$age_admission-round(age_dif/2)) &
                                                     age_admission < (patient_now$age_admission+round(age_dif/2)) &
                                                     BMI > (patient_now$BMI-round(BMI_dif/2)) &
                                                     BMI < (patient_now$BMI+round(BMI_dif/2)) &
@@ -315,16 +315,16 @@ Match_prop_ICD <- function(  exposed_group,
 
     if (method == "nearest"){
 
-      distance = abs(patient_now$prop_scores - possible_controls$prop_scores)
+      distance = abs(patient_now$prop_scores - possible_controls_now$prop_scores)
 
-      pos_matches <- possible_controls[ distance == min(distance , na.rm = TRUE ) , ] %>% filter(!is.na(X.x))
+      pos_matches <- possible_controls_now[ distance == min(distance , na.rm = TRUE ) , ] %>% filter(!is.na(X.x))
 
       match = pos_matches[sample(dim(pos_matches[1]), 1),]
     } else if ( method == "linear_nearest"){
 
-      distance = abs(logit(patient_now$prop_scores) - logit(possible_controls$prop_scores) )
+      distance = abs(logit(patient_now$prop_scores) - logit(possible_controls_now$prop_scores) )
 
-      pos_matches <- possible_controls[ distance == min(distance , na.rm = TRUE ) , ] %>% filter(!is.na(X.x))
+      pos_matches <- possible_controls_now[ distance == min(distance , na.rm = TRUE ) , ] %>% filter(!is.na(X.x))
 
       match = pos_matches[sample(dim(pos_matches[1]), 1),]
     }
@@ -338,7 +338,7 @@ Match_prop_ICD <- function(  exposed_group,
   }
 
   # get dataframe for matched cases
-  matched_cases <- dat_cases %>% filter(dim_fall_bk_pseudo %in% matched_controls$Covid_match_ID)
+  matched_cases <- exposed_group %>% filter(dim_fall_bk_pseudo %in% matched_controls$Covid_match_ID)
 
   return( list(matched_controls, matched_cases, m.out1, dat_propensity ) )
 }
