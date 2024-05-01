@@ -2,7 +2,8 @@
 % Please edit documentation in R/01_matching_functions.R
 \name{Match_prop_ICD}
 \alias{Match_prop_ICD}
-\title{Title}
+\title{Function performing propensity score based matching using functions from the
+MatchIt package.}
 \usage{
 Match_prop_ICD(
   exposed_group,
@@ -19,7 +20,9 @@ the dataframe should at least contain a column called "age_admission" with
 the age of the individual at admission into the hospital, "BMI" with the BMI,
 "gender" with gender of the individual, "sentence" with a string with all
 ICD-10 codes in sequantial order, and a column for each individual ICD-10
-code where the columns are ordered in sequential order.}
+code where the columns are ordered in sequential order. For running the propensity
+score models that include ICD-10 codes, these information needs to be provided in
+the columns as well (see example for how to create these data).}
 
 \item{possible_controls}{A dataframe of potential controls with the same structure
 as `exposed_group`.}
@@ -42,5 +45,6 @@ and the dataframe with added propensity scores and inverse probability
 weights (IPW) adjusted for case status.
 }
 \description{
-Title
+Function performing propensity score based matching using functions from the
+MatchIt package.
 }
