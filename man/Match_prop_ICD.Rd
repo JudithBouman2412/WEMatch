@@ -6,7 +6,7 @@
 MatchIt package.}
 \usage{
 Match_prop_ICD(
-  exposed_group,
+  treated_group,
   possible_controls,
   age_dif = 10,
   BMI_dif = 5,
@@ -15,7 +15,7 @@ Match_prop_ICD(
 )
 }
 \arguments{
-\item{exposed_group}{a dataframe containing the data for the exposed group,
+\item{treated_group}{a dataframe containing the data for the exposed group,
 the dataframe should at least contain a column called "age_admission" with
 the age of the individual at admission into the hospital, "BMI" with the BMI,
 "gender" with gender of the individual, "sentence" with a string with all
@@ -25,7 +25,7 @@ score models that include ICD-10 codes, these information needs to be provided i
 the columns as well (see example for how to create these data).}
 
 \item{possible_controls}{A dataframe of potential controls with the same structure
-as `exposed_group`.}
+as `treated_group`.}
 
 \item{age_dif}{Maximum permissible age difference for matching (default is 10 years).}
 
@@ -37,8 +37,8 @@ Different models use different sets of covariates for more refined control.}
 \value{
 A list containing hospitalizations in the matched cohort, the hospitalizations
 for whom a match was found, the matchit output object for further analysis,
-and the dataframe with added propensity scores and inverse probability
-weights (IPW) adjusted for case status.
+the dataframe with added propensity scores and inverse probability
+weights (IPW) adjusted for case status, and the number of individuals that were matched.
 }
 \description{
 Function performing propensity score based matching using functions from the

@@ -77,8 +77,6 @@ WEMatch <- function( treated_group,
 
         match = perfect_match[sample(nrow(perfect_match), 1, replace=F),]
 
-        matched_controls[i,2:dim(matched_controls)[2]] <- as_vector( match  )
-
         if (i == 1 ){
           matched_controls = c(patient_now$dim_fall_bk_pseudo, match )
           ICD_matched = c(as.numeric(Inf))
@@ -317,6 +315,8 @@ Match_prop_ICD <- function(  treated_group,
                                                     gender == patient_now$gender  )
 
       distance = abs( qlogis(patient_now$prop_scores) - qlogis(possible_controls_now$prop_scores)) # difference in qlogis distance
+
+      match <- data.frame(x = numeric(0), y = numeric(0))
 
       if (min(distance , na.rm = TRUE ) < max_dist ){
         pos_matches <- possible_controls_now[ distance == min(distance , na.rm = TRUE ) , ] %>% filter(!is.na(X.x))

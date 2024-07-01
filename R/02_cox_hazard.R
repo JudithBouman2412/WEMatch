@@ -7,7 +7,7 @@
 #' @return
 #' @export
 #'
-devtools::document()#' @examples
+#' @examples
 perform_mortality_analysis <- function( matched_object,
                                         figure = TRUE){
 
