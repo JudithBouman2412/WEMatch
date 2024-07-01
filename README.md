@@ -5,4 +5,5 @@ Simulated data (data(simulated_data)) is available to test the functionality of 
 The package can be easily downlaoded using devtools:
 
 library(devtools)
+
 install_github("JudithBouman2412/WEMatch") 
