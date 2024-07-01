@@ -8,10 +8,10 @@ MatchIt package.}
 Match_prop_ICD(
   exposed_group,
   possible_controls,
-  method = "nearest",
   age_dif = 10,
   BMI_dif = 5,
-  model = "mod_0"
+  model = "mod_0",
+  caliper = 0.2
 )
 }
 \arguments{
@@ -26,10 +26,6 @@ the columns as well (see example for how to create these data).}
 
 \item{possible_controls}{A dataframe of potential controls with the same structure
 as `exposed_group`.}
-
-\item{method}{A string specifying the distance method for finding matches; default is 'nearest'.
-Options include 'nearest' for nearest neighbor matching and 'linear_nearest' for linear
-nearest matching which uses logit transformations.}
 
 \item{age_dif}{Maximum permissible age difference for matching (default is 10 years).}
 

@@ -1,13 +1,13 @@
 #' Function performing the WEMatch algorithm.
 #'
-#' @param exposed_group a dataframe containing the data for the exposed group,
+#' @param treated_group a dataframe containing the data for the exposed group,
 #' the dataframe should at least contain a column called "age_admission" with
 #' the age of the individual at admission into the hospital, "BMI" with the BMI,
 #' "gender" with gender of the individual, "sentence" with a string with all
 #' ICD-10 codes in sequantial order, and a column for each individual ICD-10
 #' code where the columns are ordered in sequential order.
 #' @param possible_controls A dataframe of potential controls with the same structure
-#' as `exposed_group`.
+#' as `treated_group`.
 #' @param W2V_model A trained Word2Vec model object.
 #' @param age_dif Maximum allowed difference in age for matching (default is 10).
 #' @param BMI_dif Maximum allowed difference in BMI for matching (default is 5).
@@ -25,7 +25,7 @@
 #' @importFrom stats setNames
 #' @import dplyr
 #' @import word2vec
-WEMatch <- function( exposed_group,
+WEMatch <- function( treated_group,
                     possible_controls,
                     W2V_model,
                     age_dif=10,
@@ -34,7 +34,7 @@ WEMatch <- function( exposed_group,
   # Code, inspired by https://github.com/nphdang/WVM/blob/master/word2vec_based_matching.R
 
   # remove ICD codes with frequency less than 30?
-  n_case = dim(exposed_group)[1]
+  n_case = dim(treated_group)[1]
 
   # initialize empty vector for saving matched controls
   matched_controls <-  c()
@@ -52,7 +52,7 @@ WEMatch <- function( exposed_group,
     print(paste0(c("Matching: ", i)) )
 
     # take data of current exposed hospitalisation to match
-    patient_now <- exposed_group[i,]
+    patient_now <- treated_group[i,]
 
     # Find individuals with similar age (within distance age_dif years) & BMI (distance less than BMI_dif points)
     # and the same sex
@@ -180,7 +180,7 @@ WEMatch <- function( exposed_group,
   }
 
   # output cases that were actually matched in the algorithm
-  matched_cases <- exposed_group %>% filter(dim_fall_bk_pseudo %in% matched_controls[,1])
+  matched_cases <- treated_group %>% filter(dim_fall_bk_pseudo %in% matched_controls[,1])
 
   return(list(matched_controls, matched_cases, n_case1, n_case2, as.vector(ICD_matched[1,]) ))
 }
@@ -189,7 +189,7 @@ WEMatch <- function( exposed_group,
 #' Function performing propensity score based matching using functions from the
 #' MatchIt package.
 #'
-#' @param exposed_group a dataframe containing the data for the exposed group,
+#' @param treated_group a dataframe containing the data for the exposed group,
 #' the dataframe should at least contain a column called "age_admission" with
 #' the age of the individual at admission into the hospital, "BMI" with the BMI,
 #' "gender" with gender of the individual, "sentence" with a string with all
@@ -198,7 +198,7 @@ WEMatch <- function( exposed_group,
 #' score models that include ICD-10 codes, these information needs to be provided in
 #' the columns as well (see example for how to create these data).
 #' @param possible_controls A dataframe of potential controls with the same structure
-#' as `exposed_group`.
+#' as `treated_group`.
 #' @param age_dif Maximum permissible age difference for matching (default is 10 years).
 #' @param BMI_dif Maximum permissible BMI difference for matching (default is 5 points).
 #' @param model A string identifier for the model used to calculate propensity scores.
@@ -207,8 +207,8 @@ WEMatch <- function( exposed_group,
 #'
 #' @return A list containing hospitalizations in the matched cohort, the hospitalizations
 #' for whom a match was found, the matchit output object for further analysis,
-#' and the dataframe with added propensity scores and inverse probability
-#' weights (IPW) adjusted for case status.
+#' the dataframe with added propensity scores and inverse probability
+#' weights (IPW) adjusted for case status, and the number of individuals that were matched.
 #'
 #' @export
 #'
@@ -218,24 +218,24 @@ WEMatch <- function( exposed_group,
 #' @importFrom magrittr "%>%"
 #' @importFrom stats setNames
 #' @importFrom MatchIt matchit
-#' @importFrom stats logit
+#' @importFrom stats qlogis
 #' @import dplyr
-Match_prop_ICD <- function(  exposed_group,
+Match_prop_ICD <- function(  treated_group,
                              possible_controls,
                              age_dif=10,
                              BMI_dif=5,
                              model = "mod_0",
                              caliper = 0.2){
 
-  n_case = dim(exposed_group)[1] # number of hospitalizations in the exposed group
+  n_case = dim(treated_group)[1] # number of hospitalizations in the exposed group
 
   # create empty dataframe to save
-  matched_controls = as.data.frame(matrix(NA, nrow=n_case, ncol=dim(exposed_group)[2]+1))
-  colnames(matched_controls) = c("exposed_match_ID", colnames(exposed_group)) # add column to save to whom the hospitalization is matched
-  matched_controls[,1] = rep(exposed_group$dim_fall_bk_pseudo, each = 1)
+  matched_controls = as.data.frame(matrix(NA, nrow=n_case, ncol=dim(treated_group)[2]+1))
+  colnames(matched_controls) = c("exposed_match_ID", colnames(treated_group)) # add column to save to whom the hospitalization is matched
+  matched_controls[,1] = rep(treated_group$dim_fall_bk_pseudo, each = 1)
 
   # create one large dataframe with all individuals
-  propensity <- bind_rows(possible_controls, exposed_group) %>% mutate(I35 = as.logical(I35))
+  propensity <- bind_rows(possible_controls, treated_group)
 
   # calculate propensity for all depending on the model
   if (model == "mod_0"){
@@ -293,21 +293,21 @@ Match_prop_ICD <- function(  exposed_group,
 
   # add propensity scores from the model to the exposed and possible control group
   possible_controls$prop_scores = m.out1$distance[1:dim(possible_controls)[1]]
-  exposed_group$prop_scores = m.out1$distance[(dim(possible_controls)[1]+1):(dim(possible_controls)[1]+n_case)]
+  treated_group$prop_scores = m.out1$distance[(dim(possible_controls)[1]+1):(dim(possible_controls)[1]+n_case)]
 
   # add propensity scores and inverse prop score to the dataframe
   propensity$prop_scores = m.out1$distance
   dat_propensity = propensity %>% mutate(ipw=(case_status/prop_scores)+(1-case_status)/(1-prop_scores) )
 
   # use caliper to define max distance
-  max_dist = sd(logit(propensity$prop_scores))*caliper
+  max_dist = sd(qlogis(propensity$prop_scores))*caliper
 
   n_matches = 0
 
   # loop over all exposed hospitalizations to match with other cases
   for (i in 1:n_case){
     print(c("starting with", i))
-    patient_now <- exposed_group[i,]
+    patient_now <- treated_group[i,]
 
     # Find individuals with similar age (within distance <5 years) & BMI (distance less than 2 points)
     possible_controls_now <- possible_controls %>% filter( age_admission > (patient_now$age_admission-round(age_dif/2)) &
@@ -316,7 +316,7 @@ Match_prop_ICD <- function(  exposed_group,
                                                     BMI < (patient_now$BMI+round(BMI_dif/2, 2)) &
                                                     gender == patient_now$gender  )
 
-      distance = abs( logit(patient_now$prop_scores) - logit(possible_controls_now$prop_scores)) # difference in logit distance
+      distance = abs( qlogis(patient_now$prop_scores) - qlogis(possible_controls_now$prop_scores)) # difference in qlogis distance
 
       if (min(distance , na.rm = TRUE ) < max_dist ){
         pos_matches <- possible_controls_now[ distance == min(distance , na.rm = TRUE ) , ] %>% filter(!is.na(X.x))
@@ -335,7 +335,7 @@ Match_prop_ICD <- function(  exposed_group,
   }
 
   # get dataframe for matched cases
-  matched_cases <- exposed_group %>% filter(dim_fall_bk_pseudo %in% matched_controls$exposed_match_ID)
+  matched_cases <- treated_group %>% filter(dim_fall_bk_pseudo %in% matched_controls$exposed_match_ID)
 
   return( list(matched_controls, matched_cases, m.out1, dat_propensity, n_matches ) )
 }
